@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xrds:XRDS xmlns:xrds="xri://$xrds" xmlns="xri://$xrd*($v*2.0)">
+  <ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
+  <ds:SignedInfo>
+  <ds:CanonicalizationMethod Algorithm="http://docs.oasis-open.org/xri/xrd/2009/01#canonicalize-raw-octets" />
+  <ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1" />
+  </ds:SignedInfo>
+  <ds:KeyInfo>
+  <ds:X509Data>
+  <ds:X509Certificate>
+  MIICgjCCAeugAwIBAgIEAJSDZTANBgkqhkiG9w0BAQUFADBGMQswCQYDVQQGEwJVUzETMBEGA1UEChMKR29vZ2xlIEluYzEiMCAGA1UEAxMZR29vZ2xlIEludGVybmV0IEF1dGhvcml0eTAeFw0wOTEyMDMwMDAwMDBaFw0wOTEyMDUwMDAwMDBaMFYxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRMwEQYDVQQKEwpHb29nbGUgSW5jMR0wGwYDVQQDExRob3N0ZWQtaWQuZ29vZ2xlLmNvbTCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEAy3XqbR+sNW+12c+xSxLcC5KJfCoVPUJWL8UTww/01umn7Le1RP6OWzgs+y3Tqw4JWFzOmXtXSOJaPRQyTxwwN/A53yDfsEwf3Vb1ngu1KAP/VkiwT+hwnLyjGM4C9ecclJsUEGkcSw2HoDTdhGIQAZgta/eY/FmkoIvqIrP2EOcCAwEAAaNtMGswCQYDVR0TBAIwADARBglghkgBhvhCAQEEBAMCBBAwCwYDVR0PBAQDAgXgMB0GA1UdDgQWBBSyiedc4ngZG+thL0MGE3QnsAfkRzAfBgNVHSMEGDAWgBS/wDDr9UMRPme6npH7/Gra42sSJDANBgkqhkiG9w0BAQUFAAOBgQChOaoFcmQQOILFAs+qHgE72eqazVLcKz2bniTJYND6lzopbGoZYqQTXvjnGo/wjppcenl3YwG9Bk6ercRBOYAc2tQNqy7g2PCZeBBCBOKroiswpZb2sDLLyv4piXl7vGjuryULiMMUJKEzB0zwovxvrBofe7zg1R4KbC3FOfr9Sg==
+  </ds:X509Certificate>
+  </ds:X509Data>
+  </ds:KeyInfo>
+  </ds:Signature>
+  <XRD>
+  <CanonicalID>google.com</CanonicalID>
+  <Service priority="0">
+  <Type>http://specs.openid.net/auth/2.0/server</Type>
+  <Type>http://openid.net/srv/ax/1.0</Type>
+  <Type>http://specs.openid.net/extensions/ui/1.0/mode/popup</Type>
+  <Type>http://specs.openid.net/extensions/ui/1.0/icon</Type>
+  <Type>http://specs.openid.net/extensions/pape/1.0</Type>
+  <URI>https://www.google.com/a/google.com/o8/ud?be=o8</URI>
+  </Service>
+  <Service priority="0" xmlns:openid="http://openid.net/xmlns/2.5">
+  <Type>http://www.iana.org/assignments/relation/describedby</Type>
+  <MediaType>application/xrds+xml</MediaType>
+  <openid:URITemplate>https://www.google.com/accounts/o8/user-xrds?uri={%uri}</openid:URITemplate>
+  <openid:NextAuthority>hosted-id.google.com</openid:NextAuthority>
+  </Service>
+  </XRD>
+</xrds:XRDS>
