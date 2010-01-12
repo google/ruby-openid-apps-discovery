@@ -29,9 +29,16 @@ require 'base64'
 # Caching of discovery information is enabled when used with rails.  In other environments,
 # a cache can be set via:
 #
-#   OpenID::GoogleDiscovery.cache = ...
+#   OpenID.cache = ...
 #
 # The cache must implement methods read(key) and write(key,value)
+#
+# Similarly, logging will attempt to use the default Rail's logger, but can be overriden
+# by calling
+#
+#   OpenID.logger = ...
+#
+# The logger must respond to warn, debug, and info methods
 #
 # In some cases additional setup is required, particularly to set the location of trusted
 # root certificates for validating XRDS signatures.  If standard locations don't work, additional
@@ -50,12 +57,14 @@ module OpenID
 
   class << self
     alias_method :default_discover, :discover
+    attr_accessor :cache, :logger
   end
-  
+    
   def self.discover(uri)
     discovery = GoogleDiscovery.new
     info = discovery.perform_discovery(uri)
     if not info.nil?
+      OpenID.logger.debug("Discovery info = #{info}") unless OpenID.logger.nil?
       return info
     end
     return self.default_discover(uri)
@@ -65,11 +74,8 @@ module OpenID
   # See http://groups.google.com/group/google-federated-login-api/web/openid-discovery-for-hosted-domains
   class GoogleDiscovery
     
-    begin
-      @@cache = RAILS_CACHE
-    rescue
-      @@cache = nil
-    end
+    OpenID.cache = RAILS_CACHE rescue nil
+    OpenID.logger = RAILS_DEFAULT_LOGGER rescue nil
     
     NAMESPACES = {
       'xrds' => 'xri://$xrd*($v*2.0)',
@@ -80,22 +86,26 @@ module OpenID
     # Main entry point for discovery.  Attempts to detect whether or not the URI is a raw domain name ('mycompany.com')
     # vs. a user's claimed ID ('http://mycompany.com/openid?id=12345') and performs the site or user discovery appropriately
     def perform_discovery(uri)
+      OpenID.logger.debug("Performing discovery for #{uri}") unless OpenID.logger.nil?
       begin
         parsed_uri = URI::parse(uri)
         if parsed_uri.scheme.nil?
           return discover_site(uri)
         end
         return discover_user(parsed_uri.host, uri)
-      rescue
+      rescue Exception => e
         # If we fail, just return nothing and fallback on default discovery mechanisms
+        OpenID.logger.warn("Unexpected exception performing discovery for id #{uri}: #{e}") unless OpenID.logger.nil?
         return nil
       end
     end
     
     # Handles discovery for a user's claimed ID.  
     def discover_user(domain, claimed_id)
+      OpenID.logger.debug("Discovering user identity #{claimed_id} for domain #{domain}") unless OpenID.logger.nil?
       url = fetch_host_meta(domain)
       if url.nil?
+        OpenID.logger.debug("#{domain} is not a Google Apps domain, aborting") unless OpenID.logger.nil?
         return nil # Not a Google Apps domain
       end
       xrds = fetch_xrds(domain, url)
@@ -109,8 +119,10 @@ module OpenID
     
     # Handles discovery for a domain
     def discover_site(domain)
+      OpenID.logger.debug("Discovering domain #{domain}") unless OpenID.logger.nil?
       url = fetch_host_meta(domain)
       if url.nil?
+        OpenID.logger.debug("#{domain} is not a Google Apps domain, aborting") unless OpenID.logger.nil?
         return nil # Not a Google Apps domain
       end
       xrds = fetch_xrds(domain, url)
@@ -130,10 +142,12 @@ module OpenID
       host_meta_url = "https://www.google.com/accounts/o8/.well-known/host-meta?hd=#{CGI::escape(domain)}"
       http_resp = OpenID.fetch(host_meta_url)
       if http_resp.code != "200" and http_resp.code != "206"
+        OpenID.logger.debug("Received #{http_resp.code} when fetching #{host_meta_url}") unless OpenID.logger.nil?
         return nil
       end
       matches = /Link: <(.*)>/.match( http_resp.body )
       if matches.nil? 
+        OpenID.logger.debug("No link tag found at #{host_meta_url}") unless OpenID.logger.nil?
         return nil
       end
       put_cache(domain, matches[1])
@@ -143,20 +157,25 @@ module OpenID
     # Fetches the XRDS and verifies the signature and authority for the doc
     def fetch_xrds(authority, url, cache=true) 
       return if url.nil?
+
+      OpenID.logger.debug("Retrieving XRDS from #{url}") unless OpenID.logger.nil?
  
       cached_xrds = get_cache(url)
       return cached_xrds unless cached_xrds.nil?
 
       http_resp = OpenID.fetch(url)
-      return if http_resp.code != "200" and http_resp.code != "206" 
+      if http_resp.code != "200" and http_resp.code != "206"
+        OpenID.logger.debug("Received #{http_resp.code} when fetching #{url}") unless OpenID.logger.nil?
+        return nil
+      end
 
       body = http_resp.body
       signature = http_resp["Signature"]
       signed_by = SimpleSign.verify(body, signature)
-      if !signed_by.casecmp(authority) or !signed_by.casecmp('hosted-id.google.com') 
+      if !signed_by.casecmp(authority) or !signed_by.casecmp('hosted-id.google.com')
+        OpenID.logger.warn("Expected signature from #{authority} but found #{signed_by}") unless OpenID.logger.nil?        
         return false # Signed, but not by the right domain.
       end
-
       
       # Everything is OK
       if cache
@@ -180,13 +199,13 @@ module OpenID
     end
     
     def put_cache(key, item)
-      return if @@cache.nil?
-      @@cache.write("__GAPPS_OPENID__#{key}", item)
+      return if OpenID.cache.nil?
+      OpenID.cache.write("__GAPPS_OPENID__#{key}", item)
     end
     
     def get_cache(key)
-      return nil if @@cache.nil?
-      return @@cache.read("__GAPPS_OPENID__#{key}")
+      return nil if OpenID.cache.nil?
+      return OpenID.cache.read("__GAPPS_OPENID__#{key}")
     end
   end
 
@@ -207,6 +226,7 @@ module OpenID
     # Initialize the store
     def self.store
       if @@store.nil?
+        OpenID.logger.info("Initializing CA bundle") unless OpenID.logger.nil?        
         ca_bundle_path = File.join(File.dirname(__FILE__), 'ca-bundle.crt')
         @@store = OpenSSL::X509::Store.new
         @@store.set_default_paths

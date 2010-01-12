@@ -6,7 +6,7 @@ require 'rake/gempackagetask'
 require 'rake/clean'
 
 CLEAN.include('pkg/*')
-PKG_VERSION = "1.0"
+PKG_VERSION = "1.01"
 
 spec = Gem::Specification.new do |s|
   s.platform = Gem::Platform::RUBY
