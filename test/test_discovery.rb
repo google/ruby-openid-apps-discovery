@@ -23,25 +23,35 @@ class DiscoveryTest < Test::Unit::TestCase
   
   def test_fetch_xrds
     url = @discovery.fetch_host_meta("google.com")
-    xrds = @discovery.fetch_xrds("google.com",url)
-    assert(!xrds.nil?, "Should have found XRDS for google.com")
+    xrds, secure = @discovery.fetch_secure_xrds("google.com",url)
+    assert_not_nil(xrds, "Should have found XRDS for google.com")
   end
   
   def test_get_user_xrds_url
     xml = Fixtures.read_file("google-site-xrds.xml")
-    next_authority, url = @discovery.get_user_xrds_url(xml, "http://google.com/openid?id=12345")
-    assert(next_authority.casecmp("hosted-id.google.com"))
-    assert(url.casecmp("https://www.google.com/accounts/o8/user-xrds?uri=http%3A%2F%2Fgoogle.com%2Fopenid%3Fid%3D12345"))
+    url, next_authority = @discovery.get_user_xrds_url(xml, "http://google.com/openid?id=12345")
+    assert_equal("hosted-id.google.com", next_authority)
+    assert_equal("https://www.google.com/accounts/o8/user-xrds?uri=http%3A%2F%2Fgoogle.com%2Fopenid%3Fid%3D12345", url)
   end
   
   def test_site_discover
     info = @discovery.perform_discovery("google.com")
-    assert(!info.nil?)  
+    assert_not_nil(info, "should have found discovery info for google.com")  
+  end
+
+  def test_site_discover_url
+    info = @discovery.perform_discovery("http://marketplace-test.com/")
+    assert_not_nil(info, "should have found discovery info for http://marketplace-test.com/")  
+  end
+
+  def test_site_discover_gmail
+    info = @discovery.perform_discovery("gmail.com")
+    assert_not_nil(info, "should have found discovery info for gmail.com")  
   end
   
   def test_user_discover
     info = @discovery.perform_discovery("http://google.com/openid?id=109052429299753016317")
-    assert(!info.nil?)
+    assert_not_nil(info, "should have found discovery for user id")
   end
   
 end

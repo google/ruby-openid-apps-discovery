@@ -88,16 +88,22 @@ module OpenID
     def perform_discovery(uri)
       OpenID.logger.debug("Performing discovery for #{uri}") unless OpenID.logger.nil?
       begin
+        domain = uri
         parsed_uri = URI::parse(uri)
-        if parsed_uri.scheme.nil?
-          return discover_site(uri)
+        domain = parsed_uri.host unless parsed_uri.host.nil?
+        if site_identifier?(parsed_uri)
+          return discover_site(domain)
         end
-        return discover_user(parsed_uri.host, uri)
+        return discover_user(domain, uri)
       rescue Exception => e
         # If we fail, just return nothing and fallback on default discovery mechanisms
         OpenID.logger.warn("Unexpected exception performing discovery for id #{uri}: #{e}") unless OpenID.logger.nil?
         return nil
       end
+    end
+    
+    def site_identifier?(parsed_uri)
+      return parsed_uri.scheme.nil? || parsed_uri.path.nil? || parsed_uri.path.strip.empty?
     end
     
     # Handles discovery for a user's claimed ID.  
@@ -108,13 +114,23 @@ module OpenID
         OpenID.logger.debug("#{domain} is not a Google Apps domain, aborting") unless OpenID.logger.nil?
         return nil # Not a Google Apps domain
       end
-      xrds = fetch_xrds(domain, url)
-      user_url, authority = get_user_xrds_url(xrds, claimed_id)
-      user_xrds = fetch_xrds(authority, user_url, false)
-      return if user_xrds.nil?
+
+      xrds, signed = fetch_secure_xrds(domain, url)
+
+      unless xrds.nil?
+        # TODO - Need to propogate secure discovery info up through stack
+        user_url, authority = get_user_xrds_url(xrds, claimed_id)
+        user_xrds, signed = fetch_secure_xrds(domain, user_url, false)
       
-      endpoints = OpenID::OpenIDServiceEndpoint.from_xrds(claimed_id, user_xrds)
-      return [claimed_id, OpenID.get_op_or_user_services(endpoints)]
+        # No user xrds -- likely that identifier was just OP identifier
+        if user_xrds.nil?
+          endpoints = OpenID::OpenIDServiceEndpoint.from_xrds(domain, xrds)
+          return [claimed_id, OpenID.get_op_or_user_services(endpoints)]
+        end
+      
+        endpoints = OpenID::OpenIDServiceEndpoint.from_xrds(claimed_id, user_xrds)
+        return [claimed_id, OpenID.get_op_or_user_services(endpoints)]
+      end
     end
     
     # Handles discovery for a domain
@@ -125,10 +141,12 @@ module OpenID
         OpenID.logger.debug("#{domain} is not a Google Apps domain, aborting") unless OpenID.logger.nil?
         return nil # Not a Google Apps domain
       end
-      xrds = fetch_xrds(domain, url)
+      xrds, secure = fetch_secure_xrds(domain, url)
+      
       unless xrds.nil?
-          endpoints = OpenID::OpenIDServiceEndpoint.from_xrds(domain, xrds)
-          return [domain, OpenID.get_op_or_user_services(endpoints)]
+        # TODO - Need to propogate secure discovery info up through stack
+        endpoints = OpenID::OpenIDServiceEndpoint.from_xrds(domain, xrds)
+        return [domain, OpenID.get_op_or_user_services(endpoints)]
       end
       return nil
     end
@@ -140,11 +158,9 @@ module OpenID
       return cached_value unless cached_value.nil?
       
       host_meta_url = "https://www.google.com/accounts/o8/.well-known/host-meta?hd=#{CGI::escape(domain)}"
-      http_resp = OpenID.fetch(host_meta_url)
-      if http_resp.code != "200" and http_resp.code != "206"
-        OpenID.logger.debug("Received #{http_resp.code} when fetching #{host_meta_url}") unless OpenID.logger.nil?
-        return nil
-      end
+      http_resp = fetch_url(host_meta_url)
+      return nil if http_resp.nil?
+
       matches = /Link: <(.*)>/.match( http_resp.body )
       if matches.nil? 
         OpenID.logger.debug("No link tag found at #{host_meta_url}") unless OpenID.logger.nil?
@@ -154,34 +170,43 @@ module OpenID
       return matches[1]
     end
 
-    # Fetches the XRDS and verifies the signature and authority for the doc
-    def fetch_xrds(authority, url, cache=true) 
-      return if url.nil?
-
-      OpenID.logger.debug("Retrieving XRDS from #{url}") unless OpenID.logger.nil?
- 
-      cached_xrds = get_cache(url)
-      return cached_xrds unless cached_xrds.nil?
-
+    def fetch_url(url)
       http_resp = OpenID.fetch(url)
       if http_resp.code != "200" and http_resp.code != "206"
         OpenID.logger.debug("Received #{http_resp.code} when fetching #{url}") unless OpenID.logger.nil?
         return nil
       end
+      return http_resp
+    end
+    
+    # Fetches the XRDS and verifies the signature and authority for the doc
+    def fetch_secure_xrds(authority, url, cache=true) 
+      return if url.nil?
+
+      OpenID.logger.debug("Retrieving XRDS from #{url}") unless OpenID.logger.nil?
+ 
+      cached_xrds = get_cache("XRDS_#{url}")
+      return cached_xrds unless cached_xrds.nil?
+
+      http_resp = fetch_url(url)
+      return nil if http_resp.nil?
 
       body = http_resp.body
+      put_cache("XRDS_#{url}", body)
+
       signature = http_resp["Signature"]
       signed_by = SimpleSign.verify(body, signature)
-      if !signed_by.casecmp(authority) or !signed_by.casecmp('hosted-id.google.com')
+
+      if signed_by.nil?
+        put_cache("XRDS_#{url}", body) if cache
+        return [body, false]      
+      elsif signed_by.casecmp(authority) || signed_by.casecmp('hosted-id.google.com')
+        put_cache("XRDS_#{url}", body) if cache
+        return [body, true]
+      else
         OpenID.logger.warn("Expected signature from #{authority} but found #{signed_by}") unless OpenID.logger.nil?        
-        return false # Signed, but not by the right domain.
+        return nil # Signed, but not by the right domain.
       end
-      
-      # Everything is OK
-      if cache
-        put_cache(url, body)
-      end
-      return body      
     end    
     
     # Process the URITemplate in the XRDS to derive the location of the claimed id's XRDS
@@ -264,12 +289,15 @@ module OpenID
 
     # Verifies the signature of the doc, returning the CN of the signer if valid
     def self.verify(xml, signature_value) 
-      raise "Missing signature value" if signature_value.nil?
-      decoded_sig = Base64.decode64(signature_value)
-
       doc = REXML::Document.new(xml)
+
+      return nil if REXML::XPath.first(doc, "//ds:Signature").nil? and signature_value.nil?    
+
+      decoded_sig = Base64.decode64(signature_value)
       certs = self.parse_certificates(doc)
       raise "No signature in document" if certs.nil? or certs.empty?
+      raise "Missing signature value" if signature_value.nil?
+
 
       signing_certificate = certs.first
       raise "Invalid signature" if !signing_certificate.public_key.verify(OpenSSL::Digest::SHA1.new, decoded_sig, xml)
