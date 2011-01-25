@@ -50,9 +50,6 @@ require 'base64'
 #
 #   OpenID::SimpleSign.store.add_path(path_to_ca_dir)
 #
-# TODO:
-# - Memcache support for caching host-meta and site XRDS docs
-# - Better packaging (gem/rails)
 module OpenID
 
   class << self
