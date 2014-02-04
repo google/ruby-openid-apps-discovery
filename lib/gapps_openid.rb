@@ -72,7 +72,7 @@ module OpenID
   class GoogleDiscovery
     
     OpenID.cache = RAILS_CACHE rescue nil
-    OpenID.logger = RAILS_DEFAULT_LOGGER rescue nil
+    OpenID.logger = ::Rails.logger rescue nil
     
     NAMESPACES = {
       'xrds' => 'xri://$xrd*($v*2.0)',
