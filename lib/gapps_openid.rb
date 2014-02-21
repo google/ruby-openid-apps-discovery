@@ -71,8 +71,8 @@ module OpenID
   # See http://groups.google.com/group/google-federated-login-api/web/openid-discovery-for-hosted-domains
   class GoogleDiscovery
     
-    OpenID.cache = RAILS_CACHE rescue nil
-    OpenID.logger = RAILS_DEFAULT_LOGGER rescue nil
+    OpenID.cache = ::Rails.cache rescue nil
+    OpenID.logger = ::Rails.logger rescue nil
     
     NAMESPACES = {
       'xrds' => 'xri://$xrd*($v*2.0)',
