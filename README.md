@@ -1,5 +1,5 @@
 Add on library for ruby-openid which adds support for the discovery protocol used
-by Google Apps.
+by Google Apps.AN AMAZING PROJECT
 
 To install:
   gem install ruby-openid-apps-discovery
